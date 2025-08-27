@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+
+<head>
+  <title>Line Charts</title>
+  <meta charset="utf-8">
+
+  <script type="text/javascript" src="../lib/d3.v5.min.js"></script>
+
+</head>
+
+<body>
+  <script>
+
+    const margin = ({top: 60, right: 150, bottom: 45, left: 60})
+    const width = 954;
+    const height = 500;
+
+    const h = height - margin.top - margin.bottom
+    const w = width - margin.left - margin.right
+
+    // ordered by: id_num, title_add, rankings, scale
+    const graph_info = {0 : ["a", "", false, "linear"],
+                        1 : ["b", " with Rankings", true, "linear"],
+                        2 : ["c-1", " (Square root Scale)", true, "square root"],
+                        3 : ["c-2", " (Log Scale)", true, "log"]}
+
+    async function draw_linegraph(fig_num) {
+
+      // graph info established
+      spec_info = graph_info[fig_num];
+      console.log(spec_info)
+      id_num = spec_info[0];
+      title_add = spec_info[1];
+      rankings = spec_info[2];
+      scale = spec_info[3];
+
+      var svg = d3.select("body").append("svg")
+	   	// set the id, dimensions and position of the svg element 	
+        .attr("width", width+margin.left+margin.right)
+        .attr("height", height+margin.top+margin.bottom)
+        .attr("id", "svg-"+id_num);
+
+      await d3.csv("boardgame_ratings.csv").then(function(data) {
+        console.log(data)
+
+        const categories = ["date", "Catan=count", "Dominion=count", "Codenames=count", 
+                            "Terraforming Mars=count", "Gloomhaven=count",
+                             "Magic: The Gathering=count", "Dixit=count", "Monopoly=count"]
+
+        const new_data = data.map(d => categories.map(cat => d[cat]));
+        const max_data = data.map(d => categories.slice(1).map(cat => d[cat]));
+        console.log(new_data)
+
+        // Scale x-axis
+        var x_range = d3.extent(data.map(d => d3.timeParse("%Y-%m-%d")(d.date)))
+        console.log(x_range)
+        var xScale = d3.scaleTime()
+            .domain(x_range)
+            .range([0,width])
+        
+        // Scale y-axis
+        // var y_max = ;
+        // console.log(y_max)
+
+        if (scale == "linear") {
+          var yScale = d3.scaleLinear()
+              .domain([0,d3.max(d3.max(max_data))])
+              .range([height,0])
+        } else if (scale == "square root") {
+          var yScale = d3.scaleSqrt()
+              .domain([0,d3.max(d3.max(max_data))])
+              .range([height,0])
+        } else if (scale == "log") {
+          var yScale = d3.scaleLog()
+              .domain([1,d3.max(d3.max(max_data))])
+              .range([height,0])
+        }
+
+        // Add title
+        svg.append("text")
+          .attr("x", width/2+margin.left)
+          .attr("y", 30)
+          .attr("id", "title-"+id_num)
+          .attr("text-anchor", "middle")
+          .style("font-family", "garamond")
+          .style("font-size", 24)
+          .text("Number of Ratings 2016-2020"+title_add);
+
+        // Create plot elements
+        var plot = svg.append("g")
+              .attr("transform", "translate("+margin.left+","+margin.top + ")")
+              .attr("id", "plot-"+id_num);
+
+        // Create the x-axis
+        var x_axis = plot.append("g")
+              .attr("id", "x-axis-"+id_num)
+              .attr("transform", "translate(0,"+height+")")
+              .call(d3.axisBottom(xScale).tickFormat(d3.timeFormat("%b %y")));
+
+        // Create the y-axis
+        var y_axis = plot.append("g")
+              .attr("id", "y-axis-"+id_num)
+              .call(d3.axisLeft(yScale));
+
+        // Label the x-axis
+        x_axis.append("text")
+              .attr("x", width/2)
+              .attr("y", height+margin.bottom)
+              .attr("text-anchor", "middle")
+              .style("font-family", "helvetica")
+              .style("font-size", 16)
+              .text("Month");
+
+        // Label the y-axis
+        y_axis.append("text")
+              .attr("text-anchor", "middle")
+              .attr("transform", "translate("+3*(-margin.left)/4+","+height/2+")rotate(-90)")
+              .style("font-family", "helvetica")
+              .style("font-size", 16)
+              .text("Num of Ratings");
+
+
+      // Create lines
+      var line = d3.line()
+          .x(d => xScale(d[0]))
+          .y(d => yScale(d[1]))
+          .curve(d3.curveMonotoneX)
+
+      var line_plot = plot.append("g")
+            .attr("id", "lines-"+id_num)
+
+      var colorscale = d3.scaleOrdinal(d3.schemeCategory10);
+
+      if (rankings) {
+          // Add symbols for (b, c-1, c-2)            
+          symbols = plot.append("g")
+                .attr("id", "symbols-"+id_num);
+        };
+
+      for (var i = 1; i < categories.length; i= i+1) {
+        
+        var cur_data = data.map( d => Object.values(d)).map(d => [d3.timeParse("%Y-%m-%d")(d[0]), d[2*i-1], d[2*i]])
+        // console.log(cur_data);
+        line_plot.append("path")
+            .datum(cur_data)
+            .attr("class", "line")
+            .attr("d", line)
+            .style("fill", "none")
+            .style("stroke", colorscale(i-1))
+            .style("stroke-width", "2")
+        line_plot.append("text")
+            .text(categories[i].slice(0,-6))
+            .attr("x", width+10)
+            .attr("y", yScale(cur_data[cur_data.length-1][1]))
+            .attr("text-anchor", "start")
+            .style("font-family", "helvetica")
+            .attr("fill", colorscale(i-1));
+
+        const spec_cat = ['Catan=count', 'Codenames=count', 
+                          'Terraforming Mars=count', 'Gloomhaven=count']
+
+        // Only runs if we are including ranking elements in line graph
+        if (rankings && spec_cat.includes(categories[i])) {
+            var rank_data = cur_data.filter( (el, i) => i % 3 == 2 )
+            
+            // Add dots
+            symbols.append("g")
+                  .selectAll("dot")
+                  .data(rank_data)
+                  .enter()
+                  .append("circle")
+                  .attr("cx", function (d) { return xScale(d[0]); } )
+                  .attr("cy", function (d) { return yScale(d[1]); } )
+                  .attr("r", 16)
+                  .style("fill", colorscale(i-1));
+
+            // Add Ranks
+            symbols.append("g")
+                .selectAll("text")
+                .data(rank_data)
+                .enter()
+                .append("text")
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "middle")
+                .attr("x", function (d) { return xScale(d[0]); } )
+                .attr("y", function (d) { return yScale(d[1]); } )
+                .style("font-family", "helvetica")
+                .style("font-size", 12)
+                .style("fill", "white")
+                .text(d => d[2]);
+        }
+      };
+
+      if (rankings) {
+      // Add legend for (b, c-1, c-2)
+          var legend = svg.append("g")
+                .attr("id", "legend-"+id_num)
+
+          legend.append("circle")
+                  .attr("cx", width+margin.right)
+                  .attr("cy", height+3*margin.top/4)
+                  .attr("r", 16)
+                  .style("fill", "black");
+
+          legend.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "middle")
+                .attr("x", width+margin.right)
+                .attr("y", height+3*margin.top/4)
+                .style("font-family", "helvetica")
+                .style("font-size", 12)
+                .style("fill", "white")
+                .text("rank");
+
+          legend.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "middle")
+                .attr("x", width+margin.right)
+                .attr("y", height+margin.top+15)
+                .style("font-family", "helvetica")
+                .style("font-size", 12)
+                .style("fill", "black")
+                .text("BoardGameGeek Rank");
+
+      }
+      
+    })
+  };
+
+  var line_ids = [0, 1, 2, 3]
+
+  async function all_linegraphs() {
+    for (var i=0; i< 4; i++) {
+      await draw_linegraph(i);
+    }
+  }
+
+  all_linegraphs();
+
+  </script>
+  <div id='signature'>mhill313</div>
+</body>
